@@ -5,43 +5,92 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>PacBada Mobile</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         html, body {
-            width: 100%; height: 100%; overflow: hidden;
-            background: #000; position: fixed; top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+            position: fixed;
+            top: 0;
+            left: 0;
         }
         #unity-container {
-            width: 100vw; height: 100vh; background: #000;
-            display: flex; justify-content: center; align-items: center;
-            position: fixed; top: 0; left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: fixed;
+            top: 0;
+            left: 0;
         }
         #unity-canvas {
             background: #000;
             display: block;
-            /* 尺寸由 JS 精确控制，不再依赖 CSS */
+            /* 尺寸由 JS 精确控制 */
         }
         #loading-area {
-            position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%);
-            color: #fff; font-family: Arial; z-index: 20; text-align: center;
-            width: 80%; max-width: 400px;
+            position: fixed;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-family: Arial, sans-serif;
+            z-index: 20;
+            text-align: center;
+            width: 80%;
+            max-width: 400px;
         }
         #progress-bg {
-            width: 100%; height: 6px; background: #333; border-radius: 3px; margin: 12px 0 0;
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            margin: 12px 0 0;
         }
         #progress-fill {
-            width: 0%; height: 100%; background: #00ccff; border-radius: 3px; transition: width 0.2s;
+            width: 0%;
+            height: 100%;
+            background: #00ccff;
+            border-radius: 3px;
+            transition: width 0.2s;
         }
         #error-msg {
-            color: #ff5555; font-size: 14px; margin-top: 20px; word-break: break-all;
+            color: #ff5555;
+            font-size: 14px;
+            margin-top: 20px;
+            word-break: break-all;
             display: none;
         }
+        /* 横屏提示遮罩 */
         #rotate-tip {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.95); color: #fff; font-size: 24px;
-            display: none; justify-content: center; align-items: center;
-            z-index: 9999; flex-direction: column; text-align: center;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            color: #fff;
+            font-size: 24px;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            flex-direction: column;
+            text-align: center;
+            font-family: Arial, sans-serif;
         }
-        #rotate-tip span { font-size: 16px; color: #aaa; margin-top: 10px; }
+        #rotate-tip span {
+            font-size: 16px;
+            color: #aaa;
+            margin-top: 10px;
+        }
         @media (orientation: portrait) {
             #rotate-tip { display: flex !important; }
         }
@@ -52,24 +101,27 @@
 </head>
 <body>
 
+    <!-- 横屏提示 -->
     <div id="rotate-tip">
         📱⤵️Please rotate your phone
         <span>（Automatically enter after rotating the phone）</span>
     </div>
 
+    <!-- 加载进度 -->
     <div id="loading-area">
         <div id="loading-status">加载中...</div>
         <div id="progress-bg"><div id="progress-fill"></div></div>
         <div id="error-msg"></div>
     </div>
 
+    <!-- 游戏容器 -->
     <div id="unity-container">
         <canvas id="unity-canvas"></canvas>
     </div>
 
     <script>
         // =========================================================
-        // 文件路径配置（请确保和 Build 文件夹里的文件名完全一致）
+        // 1. 文件路径配置（请确保和 Build 文件夹里的文件名完全一致）
         // =========================================================
         var buildFiles = {
             loaderUrl: "Build/PacbadaWebMobileFinal.loader.js",
@@ -79,7 +131,7 @@
         };
 
         // =========================================================
-        // 【核心】精确控制 Canvas 显示尺寸，解决拉伸问题
+        // 2. Canvas 精确缩放（彻底解决拉伸）
         // =========================================================
         var canvas = document.getElementById("unity-canvas");
         var GAME_W = 1280;
@@ -88,15 +140,14 @@
 
         function fitCanvas() {
             if (!canvas) return;
-            
             var screenW = window.innerWidth;
             var screenH = window.innerHeight;
             if (screenW === 0 || screenH === 0) return;
-            
+
             var screenRatio = screenW / screenH;
             var displayW, displayH;
-            
-            // 模式1：等比缩放 + 黑边（Letterbox）- 画面完整不裁剪
+
+            // 等比缩放，保持完整画面（可能有黑边）
             if (screenRatio > GAME_RATIO) {
                 displayH = screenH;
                 displayW = screenH * GAME_RATIO;
@@ -104,21 +155,10 @@
                 displayW = screenW;
                 displayH = screenW / GAME_RATIO;
             }
-            
-            // 如果你想完全填满屏幕（画面可能会被轻微裁剪），启用下面的代码，并注释掉上面的 if-else：
-            /*
-            if (screenRatio > GAME_RATIO) {
-                displayW = screenW;
-                displayH = screenW / GAME_RATIO;
-            } else {
-                displayH = screenH;
-                displayW = screenH * GAME_RATIO;
-            }
-            */
-            
+
             displayW = Math.round(displayW);
             displayH = Math.round(displayH);
-            
+
             canvas.style.width = displayW + 'px';
             canvas.style.height = displayH + 'px';
             canvas.style.position = 'absolute';
@@ -128,25 +168,25 @@
             canvas.style.background = '#000';
         }
 
-        window.addEventListener("resize", fitCanvas);
-        window.addEventListener("orientationchange", function() {
+        window.addEventListener('resize', fitCanvas);
+        window.addEventListener('orientationchange', function() {
             setTimeout(fitCanvas, 600);
         });
 
         // =========================================================
-        // 状态元素
+        // 3. 状态元素
         // =========================================================
-        var statusEl = document.getElementById("loading-status");
-        var fillEl = document.getElementById("progress-fill");
-        var errorEl = document.getElementById("error-msg");
+        var statusEl = document.getElementById('loading-status');
+        var fillEl = document.getElementById('progress-fill');
+        var errorEl = document.getElementById('error-msg');
 
         if (!window.WebGLRenderingContext) {
-            statusEl.innerHTML = "浏览器不支持 WebGL";
-            throw new Error("No WebGL");
+            statusEl.innerHTML = '浏览器不支持 WebGL';
+            throw new Error('No WebGL');
         }
 
         // =========================================================
-        // 手动加载 framework.js 和 loader.js
+        // 4. 手动加载 framework.js 和 loader.js（绕开自动加载失败）
         // =========================================================
         var frameworkLoaded = false;
         var loaderLoaded = false;
@@ -200,44 +240,56 @@
         document.head.appendChild(loaderScript);
 
         // =========================================================
-        // Unity 启动函数
+        // 5. Unity 启动函数
         // =========================================================
         function startUnity() {
             var config = {
                 dataUrl: buildFiles.dataUrl,
                 frameworkUrl: buildFiles.frameworkUrl,
                 codeUrl: buildFiles.wasmUrl,
-                streamingAssetsUrl: "StreamingAssets",
-                companyName: "DefaultCompany",
-                productName: "PacBada",
-                productVersion: "1.0",
+                streamingAssetsUrl: 'StreamingAssets',
+                companyName: 'DefaultCompany',
+                productName: 'PacBada',
+                productVersion: '1.0',
                 showBanner: false,
             };
 
             function onProgress(progress) {
                 var pct = Math.min(100, Math.round(progress * 100));
-                fillEl.style.width = pct + "%";
-                statusEl.innerHTML = "加载中 " + pct + "%";
+                fillEl.style.width = pct + '%';
+                statusEl.innerHTML = '加载中 ' + pct + '%';
                 if (pct >= 100) {
-                    document.getElementById("loading-area").style.display = "none";
+                    document.getElementById('loading-area').style.display = 'none';
                 }
             }
 
             function onSuccess(instance) {
-                document.getElementById("loading-area").style.display = "none";
-                console.log("🎮 游戏启动成功！");
+                document.getElementById('loading-area').style.display = 'none';
+                console.log('🎮 游戏启动成功！');
+
+                // ★ 关键修复：强制触发 resize 事件，让 Unity 重新适配屏幕
+                setTimeout(function() {
+                    window.dispatchEvent(new Event('resize'));
+                    console.log('🔄 强制触发 resize 事件');
+                }, 300);
+
+                // 多次矫正 Canvas（保险）
                 setTimeout(fitCanvas, 100);
                 setTimeout(fitCanvas, 500);
+                setTimeout(fitCanvas, 1000);
             }
 
             function onError(err) {
-                statusEl.innerHTML = "❌ 加载失败";
-                errorEl.style.display = "block";
-                errorEl.innerHTML = "错误详情：<br>" + (err.message || err);
-                console.error("Unity 加载错误:", err);
+                statusEl.innerHTML = '❌ 加载失败';
+                errorEl.style.display = 'block';
+                errorEl.innerHTML = '错误详情：<br>' + (err.message || err);
+                console.error('Unity 加载错误:', err);
             }
 
+            // 先矫正一次
             setTimeout(fitCanvas, 50);
+
+            // 开始加载 Unity
             createUnityInstance(canvas, config, onProgress)
                 .then(onSuccess)
                 .catch(onError);
