@@ -1,7 +1,7 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en-us">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>吃豆人</title>
     <style>
@@ -39,12 +39,9 @@
 
         #unity-canvas {
             display: block;
-            image-rendering: crisp-edges;
-            -webkit-transform: translateZ(0);
-            transform: translateZ(0);
         }
 
-        /* 加载进度条样式 */
+        /* 加载进度条 */
         #unity-loading-bar {
             position: fixed;
             top: 50%;
@@ -54,14 +51,6 @@
             flex-direction: column;
             align-items: center;
             z-index: 100;
-        }
-
-        #unity-logo {
-            width: 200px;
-            height: 100px;
-            background: url('TemplateData/logo.png') no-repeat center;
-            background-size: contain;
-            margin-bottom: 20px;
         }
 
         #unity-progress-bar-empty {
@@ -87,7 +76,7 @@
             margin-top: 15px;
         }
 
-        /* 横屏提示遮罩 */
+        /* 横屏提示 */
         #orientation-warning {
             position: fixed;
             top: 0;
@@ -109,8 +98,7 @@
 
         @keyframes rotate-phone {
             0%, 100% { transform: rotate(0deg); }
-            25% { transform: rotate(-90deg); }
-            75% { transform: rotate(-90deg); }
+            50% { transform: rotate(-90deg); }
         }
 
         #orientation-warning .text {
@@ -120,34 +108,13 @@
             margin-top: 30px;
             text-align: center;
         }
-
-        /* 移动端全屏按钮（可选） */
-        #fullscreen-button {
-            position: fixed;
-            bottom: 10px;
-            right: 10px;
-            width: 40px;
-            height: 40px;
-            background: rgba(255, 255, 255, 0.3);
-            border: 2px solid #FFFFFF;
-            border-radius: 8px;
-            display: none;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            cursor: pointer;
-            font-size: 20px;
-            color: #FFFFFF;
-        }
     </style>
 </head>
 <body>
     <div id="unity-container">
         <canvas id="unity-canvas" width="1280" height="720" tabindex="-1"></canvas>
         
-        <!-- 加载进度条 -->
         <div id="unity-loading-bar">
-            <div id="unity-logo"></div>
             <div id="unity-progress-bar-empty">
                 <div id="unity-progress-bar-full"></div>
             </div>
@@ -155,34 +122,19 @@
         </div>
     </div>
 
-    <!-- 横屏提示 -->
     <div id="orientation-warning">
         <div class="icon">📱</div>
         <div class="text">请将手机横屏放置<br>以开始游戏</div>
     </div>
 
-    <!-- 全屏按钮 -->
-    <div id="fullscreen-button">⛶</div>
-
     <script>
         // ============================================
-        // 全局变量
+        // Canvas自适应
         // ============================================
         var unityCanvas = document.getElementById('unity-canvas');
-        var loadingBar = document.getElementById('unity-loading-bar');
-        var progressBarFull = document.getElementById('unity-progress-bar-full');
-        var progressText = document.getElementById('unity-loading-text');
-        var orientationWarning = document.getElementById('orientation-warning');
-        var fullscreenButton = document.getElementById('fullscreen-button');
-        var unityInstance = null;
-
-        // 目标分辨率（横屏）
         var TARGET_WIDTH = 1280;
         var TARGET_HEIGHT = 720;
 
-        // ============================================
-        // Canvas自适应核心函数
-        // ============================================
         function resizeCanvas() {
             if (!unityCanvas) {
                 unityCanvas = document.querySelector('canvas');
@@ -191,95 +143,83 @@
 
             var screenWidth = window.innerWidth;
             var screenHeight = window.innerHeight;
+            var scale = Math.min(screenWidth / TARGET_WIDTH, screenHeight / TARGET_HEIGHT);
 
-            // 计算等比缩放比例，确保完整显示
-            var scaleX = screenWidth / TARGET_WIDTH;
-            var scaleY = screenHeight / TARGET_HEIGHT;
-            var scale = Math.min(scaleX, scaleY);
-
-            // 设置CSS尺寸
             unityCanvas.style.width = Math.floor(TARGET_WIDTH * scale) + 'px';
             unityCanvas.style.height = Math.floor(TARGET_HEIGHT * scale) + 'px';
-
-            // 强制设置Canvas实际分辨率（关键！）
-            if (unityCanvas.width !== TARGET_WIDTH || unityCanvas.height !== TARGET_HEIGHT) {
-                unityCanvas.width = TARGET_WIDTH;
-                unityCanvas.height = TARGET_HEIGHT;
-            }
+            unityCanvas.width = TARGET_WIDTH;
+            unityCanvas.height = TARGET_HEIGHT;
         }
 
         // ============================================
         // 横屏检测
         // ============================================
         function checkOrientation() {
-            var isLandscape = window.innerWidth > window.innerHeight;
-            
-            if (isLandscape) {
-                orientationWarning.style.display = 'none';
-                fullscreenButton.style.display = 'flex';
-                // 横屏时刷新Canvas
-                setTimeout(resizeCanvas, 50);
+            var warning = document.getElementById('orientation-warning');
+            if (window.innerWidth > window.innerHeight) {
+                warning.style.display = 'none';
+                setTimeout(resizeCanvas, 100);
             } else {
-                orientationWarning.style.display = 'flex';
-                fullscreenButton.style.display = 'none';
+                warning.style.display = 'flex';
             }
         }
 
         // ============================================
-        // 全屏功能
+        // 全局修复函数（供Unity C#调用）
         // ============================================
-        function toggleFullscreen() {
-            var doc = window.document;
-            var docEl = doc.documentElement;
+        window.FixCanvasSize = function() {
+            resizeCanvas();
+            setTimeout(resizeCanvas, 100);
+            setTimeout(resizeCanvas, 300);
+        };
 
-            var requestFullScreen = docEl.requestFullscreen || 
-                                    docEl.mozRequestFullScreen || 
-                                    docEl.webkitRequestFullScreen || 
-                                    docEl.msRequestFullscreen;
-            var cancelFullScreen = doc.exitFullscreen || 
-                                   doc.mozCancelFullScreen || 
-                                   doc.webkitExitFullscreen || 
-                                   doc.msExitFullscreen;
-
-            if (!doc.fullscreenElement && !doc.mozFullScreenElement && 
-                !doc.webkitFullscreenElement && !doc.msFullscreenElement) {
-                requestFullScreen.call(docEl);
-                // 进入全屏后锁定横屏
-                if (screen.orientation && screen.orientation.lock) {
-                    screen.orientation.lock('landscape').catch(function() {});
+        // ============================================
+        // 监听Canvas变化
+        // ============================================
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'attributes' && 
+                    (mutation.attributeName === 'width' || mutation.attributeName === 'height')) {
+                    requestAnimationFrame(resizeCanvas);
                 }
-            } else {
-                cancelFullScreen.call(doc);
-            }
+            });
+        });
+
+        if (unityCanvas) {
+            observer.observe(unityCanvas, { attributes: true });
         }
 
         // ============================================
-        // Canvas变化监听器（终极修复）
+        // 事件监听
         // ============================================
-        function setupCanvasObserver() {
-            if (!unityCanvas) return;
+        window.addEventListener('resize', function() {
+            checkOrientation();
+            resizeCanvas();
+        });
 
-            var observer = new MutationObserver(function(mutations) {
-                mutations.forEach(function(mutation) {
-                    if (mutation.type === 'attributes' && 
-                        (mutation.attributeName === 'width' || mutation.attributeName === 'height')) {
-                        // Unity内部修改了Canvas尺寸，立即强制恢复
-                        requestAnimationFrame(function() {
-                            resizeCanvas();
-                        });
-                    }
-                });
-            });
+        window.addEventListener('orientationchange', function() {
+            setTimeout(function() {
+                checkOrientation();
+                resizeCanvas();
+            }, 300);
+        });
 
-            observer.observe(unityCanvas, { 
-                attributes: true,
-                attributeFilter: ['width', 'height']
-            });
-        }
+        // 禁止双击缩放
+        document.addEventListener('dblclick', function(e) {
+            e.preventDefault();
+        }, { passive: false });
+
+        // 初始检查
+        checkOrientation();
 
         // ============================================
-        // Unity加载配置
+        // Unity加载配置 - 保持默认模板格式
         // ============================================
+        var container = document.querySelector("#unity-container");
+        var loadingBar = document.querySelector("#unity-loading-bar");
+        var progressBarFull = document.querySelector("#unity-progress-bar-full");
+        var progressText = document.querySelector("#unity-loading-text");
+
         var buildUrl = "Build";
         var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
         var config = {
@@ -296,126 +236,52 @@
             companyName: "{{{ COMPANY_NAME }}}",
             productName: "{{{ PRODUCT_NAME }}}",
             productVersion: "{{{ PRODUCT_VERSION }}}",
-            matchWebGLToCanvasSize: false,  // 重要：禁止Unity自动匹配Canvas尺寸
-            devicePixelRatio: 1             // 固定为1，防止高DPI屏幕导致坐标错乱
+            matchWebGLToCanvasSize: false,
+            devicePixelRatio: 1
         };
 
-        // ============================================
-        // Unity进度回调
-        // ============================================
-        function onUnityProgress(progress) {
-            var percent = Math.round(progress * 100);
-            progressBarFull.style.width = percent + '%';
-            progressText.textContent = 'Loading... ' + percent + '%';
-        }
-
-        // ============================================
-        // Unity加载完成回调
-        // ============================================
-        function onUnityReady() {
-            // 隐藏加载条
-            loadingBar.style.display = 'none';
-            
-            // 强制刷新Canvas
-            setTimeout(function() {
-                resizeCanvas();
-                // 二次确认，延迟再刷一次
-                requestAnimationFrame(function() {
-                    resizeCanvas();
-                });
-            }, 100);
-
-            // 启动Canvas监听
-            setupCanvasObserver();
-            
-            // 检查横屏状态
-            checkOrientation();
-        }
-
-        // ============================================
-        // 全局暴露Canvas修复函数（供jslib调用）
-        // ============================================
-        window.FixCanvasSize = function() {
-            // 立即执行
-            resizeCanvas();
-            // 延迟确保Unity渲染完成
-            setTimeout(function() {
-                resizeCanvas();
-                // 再次确认
-                requestAnimationFrame(function() {
-                    resizeCanvas();
-                });
-            }, 150);
-        };
-
-        // ============================================
-        // 事件监听
-        // ============================================
-        window.addEventListener('resize', function() {
-            checkOrientation();
-            resizeCanvas();
-        });
-
-        window.addEventListener('orientationchange', function() {
-            // 延迟执行，等浏览器完成旋转
-            setTimeout(function() {
-                checkOrientation();
-                resizeCanvas();
-            }, 300);
-        });
-
-        fullscreenButton.addEventListener('click', toggleFullscreen);
-        fullscreenButton.addEventListener('touchend', function(e) {
-            e.preventDefault();
-            toggleFullscreen();
-        });
-
-        // 防止双击缩放
-        document.addEventListener('dblclick', function(e) {
-            e.preventDefault();
-        }, { passive: false });
-
-        // 防止手势缩放
-        document.addEventListener('gesturestart', function(e) {
-            e.preventDefault();
-        });
-
-        document.addEventListener('gesturechange', function(e) {
-            e.preventDefault();
-        });
-
-        document.addEventListener('gestureend', function(e) {
-            e.preventDefault();
-        });
-
-        // ============================================
-        // 页面加载完成后启动Unity
-        // ============================================
-        document.addEventListener('DOMContentLoaded', function() {
-            // 初始检查
-            checkOrientation();
-            
-            // 创建Unity实例
-            createUnityInstance(unityCanvas, config, onUnityProgress)
-                .then(function(instance) {
+        // 根据文件名自动判断加载器版本
+        if (/\.loader\.js$/.test(loaderUrl)) {
+            // Unity 2020.1+ 使用新的加载方式
+            var script = document.createElement("script");
+            script.src = loaderUrl;
+            script.onload = function() {
+                createUnityInstance(unityCanvas, config, function(progress) {
+                    var percent = Math.round(progress * 100);
+                    progressBarFull.style.width = percent + '%';
+                    progressText.textContent = 'Loading... ' + percent + '%';
+                }).then(function(instance) {
+                    loadingBar.style.display = 'none';
                     unityInstance = instance;
-                    onUnityReady();
-                })
-                .catch(function(error) {
+                    // 加载完成后修复Canvas
+                    setTimeout(resizeCanvas, 200);
+                    setTimeout(resizeCanvas, 500);
+                }).catch(function(error) {
                     console.error('Unity加载失败:', error);
-                    progressText.textContent = '加载失败，请刷新页面';
-                    progressText.style.color = '#FF4444';
+                    progressText.textContent = '加载失败，请刷新重试';
                 });
-        });
-
-        // ============================================
-        // 页面卸载时清理
-        // ============================================
-        window.addEventListener('beforeunload', function() {
-            if (unityInstance) {
-                unityInstance.Quit();
-            }
-        });
+            };
+            document.body.appendChild(script);
+        } else {
+            // Unity 2019及更早版本使用UnityLoader
+            var script = document.createElement("script");
+            script.src = loaderUrl;
+            script.onload = function() {
+                var gameInstance = UnityLoader.instantiate("unity-container", buildUrl + "/{{{ BUILD_FILENAME }}}", {
+                    onProgress: function(gameInstance, progress) {
+                        var percent = Math.round(progress * 100);
+                        progressBarFull.style.width = percent + '%';
+                        progressText.textContent = 'Loading... ' + percent + '%';
+                    },
+                    onComplete: function() {
+                        loadingBar.style.display = 'none';
+                        setTimeout(resizeCanvas, 200);
+                        setTimeout(resizeCanvas, 500);
+                    }
+                });
+            };
+            document.body.appendChild(script);
+        }
     </script>
 </body>
 </html>
