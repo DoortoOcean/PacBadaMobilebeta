@@ -33,8 +33,7 @@
         #unity-canvas {
             background: #000;
             display: block;
-            /* ★ 微调偏移用，修改 VERTICAL_OFFSET 即可 ★ */
-            transform: translateY(0px);
+            /* 不设置任何定位，由父级flex完全居中 */
         }
         #loading-area {
             position: fixed;
@@ -117,11 +116,6 @@
 
     <script>
         // =========================================================
-        // ★ 手动调整垂直偏移（正数下移，负数上移） ★
-        // =========================================================
-        var VERTICAL_OFFSET = 0;   // 单位：像素，请根据实际效果微调
-
-        // =========================================================
         // 文件路径配置（请与 Build 文件夹内文件名完全一致）
         // =========================================================
         var buildFiles = {
@@ -139,13 +133,12 @@
         var unityInstance = null;
 
         // =========================================================
-        // ★ 核心适配函数（带垂直微调）
+        // ★ 核心适配函数（强制覆盖 Canvas 分辨率）
         // =========================================================
         function fitCanvas() {
             if (!canvas) return;
-            // 改用 clientWidth/Height 避免浏览器工具栏干扰
-            var screenW = document.documentElement.clientWidth;
-            var screenH = document.documentElement.clientHeight;
+            var screenW = window.innerWidth;
+            var screenH = window.innerHeight;
             if (screenW === 0 || screenH === 0) return;
 
             var screenRatio = screenW / screenH;
@@ -162,38 +155,36 @@
             displayW = Math.round(displayW);
             displayH = Math.round(displayH);
 
-            // CSS 显示尺寸（父容器 flex 自动居中）
+            // 只设置 CSS 尺寸，不再设置绝对定位（居中由父级 flex 完成）
             canvas.style.width = displayW + 'px';
             canvas.style.height = displayH + 'px';
             canvas.style.background = '#000';
 
-            // ★ 应用垂直偏移（注意保留原有 transform，这里直接覆盖）
-            canvas.style.transform = 'translateY(' + VERTICAL_OFFSET + 'px)';
-
-            // ★★★★★ 强制覆盖物理像素（去掉 if 判断）★★★★★
+            // 强制覆盖物理像素（去掉 if 判断，确保每次都重新赋值）
             var realW = displayW * dpr;
             var realH = displayH * dpr;
             canvas.width = realW;
             canvas.height = realH;
             console.log('🔥 强制覆盖 Canvas 分辨率: ' + realW + 'x' + realH);
 
-            // 同步 Unity 引擎内部渲染分辨率
+            // 同步 Unity 内部渲染分辨率
             if (unityInstance && typeof unityInstance.SetResolution === 'function') {
                 unityInstance.SetResolution(canvas.width, canvas.height);
                 console.log('✅ 同步 Unity 分辨率: ' + canvas.width + 'x' + canvas.height);
             }
         }
 
-        // ★ 全局刷新函数
+        // ★ 全局刷新函数（供外部调用）
         window.refreshGameCanvas = function() {
             console.log('🔄 收到刷新请求');
             dpr = window.devicePixelRatio || 1;
             fitCanvas();
+            // 额外派发 resize 事件，确保 Unity 内部布局更新
             window.dispatchEvent(new Event('resize'));
         };
 
         // =========================================================
-        // 监听事件（增强版）
+        // 事件监听
         // =========================================================
         window.addEventListener('resize', function() {
             console.log('📐 resize 事件触发');
@@ -208,6 +199,7 @@
             }, 600);
         });
 
+        // 页面从后台切回前台时重新适配
         document.addEventListener('visibilitychange', function() {
             if (!document.hidden) {
                 console.log('👀 页面可见性变化（回到前台）');
@@ -285,19 +277,22 @@
                 console.log('🎮 游戏启动成功');
                 unityInstance = instance;
 
+                // 立即适配一次
                 window.refreshGameCanvas();
 
-                // 倒计时期间高频刷新（0.5s ~ 5.0s，每 300ms 一次）
+                // ★ 关键修补：在 3-2-1 倒计时期间（0.5s ~ 5s）每 300ms 暴力刷新
+                // 彻底压制 Unity 内部可能错误修改 Canvas 的行为
                 for (var i = 0; i < 16; i++) {
                     (function(index) {
-                        var delay = 500 + index * 300;
+                        var delay = 500 + index * 300; // 500ms, 800ms, 1100ms ... 5000ms
                         setTimeout(function() {
-                            console.log('⏰ 防放大刷新 #' + (index + 1));
+                            console.log('⏰ 倒计时防放大刷新 #' + (index + 1));
                             window.refreshGameCanvas();
                         }, delay);
                     })(i);
                 }
 
+                // 额外保险：6.5 秒再补一次
                 setTimeout(window.refreshGameCanvas, 6500);
             }
 
@@ -308,10 +303,13 @@
                 console.error('Unity 加载错误:', err);
             }
 
+            // 启动前先做一次适配
             setTimeout(window.refreshGameCanvas, 50);
+
             createUnityInstance(canvas, config, onProgress).then(onSuccess).catch(onError);
         }
 
+        // 初始适配
         setTimeout(window.refreshGameCanvas, 50);
     </script>
 </body>
