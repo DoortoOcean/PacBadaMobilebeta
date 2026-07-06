@@ -1,287 +1,309 @@
 <!DOCTYPE html>
-<html lang="en-us">
+<html lang="zh-CN">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>吃豆人</title>
+    <title>PacBada Mobile</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-
         html, body {
             width: 100%;
             height: 100%;
             overflow: hidden;
-            background: #000000;
-            touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            user-select: none;
+            background: #000;
             position: fixed;
             top: 0;
             left: 0;
         }
-
         #unity-container {
-            position: fixed;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #000000;
-        }
-
-        #unity-canvas {
-            display: block;
-        }
-
-        /* 加载进度条 */
-        #unity-loading-bar {
             position: fixed;
-            top: 50%;
+            top: 0;
+            left: 0;
+        }
+        #unity-canvas {
+            background: #000;
+            display: block;
+            /* 尺寸由 JS 精确控制 */
+        }
+        #loading-area {
+            position: fixed;
             left: 50%;
+            top: 50%;
             transform: translate(-50%, -50%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            z-index: 100;
+            color: #fff;
+            font-family: Arial, sans-serif;
+            z-index: 20;
+            text-align: center;
+            width: 80%;
+            max-width: 400px;
         }
-
-        #unity-progress-bar-empty {
-            width: 200px;
-            height: 20px;
-            background: #333333;
-            border-radius: 10px;
-            overflow: hidden;
+        #progress-bg {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            margin: 12px 0 0;
         }
-
-        #unity-progress-bar-full {
+        #progress-fill {
             width: 0%;
             height: 100%;
-            background: #FFD700;
-            border-radius: 10px;
-            transition: width 0.3s ease;
+            background: #00ccff;
+            border-radius: 3px;
+            transition: width 0.2s;
         }
-
-        #unity-loading-text {
-            color: #FFFFFF;
-            font-family: Arial, sans-serif;
-            font-size: 18px;
-            margin-top: 15px;
+        #error-msg {
+            color: #ff5555;
+            font-size: 14px;
+            margin-top: 20px;
+            word-break: break-all;
+            display: none;
         }
-
-        /* 横屏提示 */
-        #orientation-warning {
+        /* 横屏提示遮罩 */
+        #rotate-tip {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
             background: rgba(0, 0, 0, 0.95);
+            color: #fff;
+            font-size: 24px;
             display: none;
             justify-content: center;
             align-items: center;
-            z-index: 1000;
+            z-index: 9999;
             flex-direction: column;
-        }
-
-        #orientation-warning .icon {
-            font-size: 80px;
-            animation: rotate-phone 2s ease-in-out infinite;
-        }
-
-        @keyframes rotate-phone {
-            0%, 100% { transform: rotate(0deg); }
-            50% { transform: rotate(-90deg); }
-        }
-
-        #orientation-warning .text {
-            color: #FFFFFF;
-            font-family: Arial, sans-serif;
-            font-size: 24px;
-            margin-top: 30px;
             text-align: center;
+            font-family: Arial, sans-serif;
+        }
+        #rotate-tip span {
+            font-size: 16px;
+            color: #aaa;
+            margin-top: 10px;
+        }
+        @media (orientation: portrait) {
+            #rotate-tip { display: flex !important; }
+        }
+        @media (orientation: landscape) {
+            #rotate-tip { display: none !important; }
         }
     </style>
 </head>
 <body>
-    <div id="unity-container">
-        <canvas id="unity-canvas" width="1280" height="720" tabindex="-1"></canvas>
-        
-        <div id="unity-loading-bar">
-            <div id="unity-progress-bar-empty">
-                <div id="unity-progress-bar-full"></div>
-            </div>
-            <div id="unity-loading-text">Loading... 0%</div>
-        </div>
+
+    <!-- 横屏提示 -->
+    <div id="rotate-tip">
+        📱⤵️Please rotate your phone
+        <span>（Automatically enter after rotating the phone）</span>
     </div>
 
-    <div id="orientation-warning">
-        <div class="icon">📱</div>
-        <div class="text">请将手机横屏放置<br>以开始游戏</div>
+    <!-- 加载进度 -->
+    <div id="loading-area">
+        <div id="loading-status">加载中...</div>
+        <div id="progress-bg"><div id="progress-fill"></div></div>
+        <div id="error-msg"></div>
+    </div>
+
+    <!-- 游戏容器 -->
+    <div id="unity-container">
+        <canvas id="unity-canvas"></canvas>
     </div>
 
     <script>
-        // ============================================
-        // Canvas自适应
-        // ============================================
-        var unityCanvas = document.getElementById('unity-canvas');
-        var TARGET_WIDTH = 1280;
-        var TARGET_HEIGHT = 720;
+        // =========================================================
+        // 1. 文件路径配置（请确保和 Build 文件夹里的文件名完全一致）
+        // =========================================================
+        var buildFiles = {
+            loaderUrl: "Build/PacbadaWebMobileFinal.loader.js",
+            frameworkUrl: "Build/PacbadaWebMobileFinal.framework.js",
+            dataUrl: "Build/PacbadaWebMobileFinal.data",
+            wasmUrl: "Build/PacbadaWebMobileFinal.wasm",
+        };
 
-        function resizeCanvas() {
-            if (!unityCanvas) {
-                unityCanvas = document.querySelector('canvas');
-                if (!unityCanvas) return;
-            }
+        // =========================================================
+        // 2. Canvas 精确缩放（彻底解决拉伸）
+        // =========================================================
+        var canvas = document.getElementById("unity-canvas");
+        var GAME_W = 1280;
+        var GAME_H = 720;
+        var GAME_RATIO = GAME_W / GAME_H;
 
-            var screenWidth = window.innerWidth;
-            var screenHeight = window.innerHeight;
-            var scale = Math.min(screenWidth / TARGET_WIDTH, screenHeight / TARGET_HEIGHT);
+        function fitCanvas() {
+            if (!canvas) return;
+            var screenW = window.innerWidth;
+            var screenH = window.innerHeight;
+            if (screenW === 0 || screenH === 0) return;
 
-            unityCanvas.style.width = Math.floor(TARGET_WIDTH * scale) + 'px';
-            unityCanvas.style.height = Math.floor(TARGET_HEIGHT * scale) + 'px';
-            unityCanvas.width = TARGET_WIDTH;
-            unityCanvas.height = TARGET_HEIGHT;
-        }
+            var screenRatio = screenW / screenH;
+            var displayW, displayH;
 
-        // ============================================
-        // 横屏检测
-        // ============================================
-        function checkOrientation() {
-            var warning = document.getElementById('orientation-warning');
-            if (window.innerWidth > window.innerHeight) {
-                warning.style.display = 'none';
-                setTimeout(resizeCanvas, 100);
+            // 等比缩放，保持完整画面（可能有黑边）
+            if (screenRatio > GAME_RATIO) {
+                displayH = screenH;
+                displayW = screenH * GAME_RATIO;
             } else {
-                warning.style.display = 'flex';
+                displayW = screenW;
+                displayH = screenW / GAME_RATIO;
+            }
+
+            displayW = Math.round(displayW);
+            displayH = Math.round(displayH);
+
+            canvas.style.width = displayW + 'px';
+            canvas.style.height = displayH + 'px';
+            canvas.style.position = 'absolute';
+            canvas.style.left = '50%';
+            canvas.style.top = '50%';
+            canvas.style.transform = 'translate(-50%, -50%)';
+            canvas.style.background = '#000';
+        }
+
+        // ★ 供 Unity 调用的刷新函数（倒计时结束时触发）
+        window.refreshGameCanvas = function() {
+            console.log('Unity 请求刷新 Canvas');
+            fitCanvas();
+            // 派发 resize 事件，强制 Unity 内部重新计算视口
+            window.dispatchEvent(new Event('resize'));
+        };
+
+        window.addEventListener('resize', fitCanvas);
+        window.addEventListener('orientationchange', function() {
+            setTimeout(fitCanvas, 600);
+        });
+
+        // =========================================================
+        // 3. 状态元素
+        // =========================================================
+        var statusEl = document.getElementById('loading-status');
+        var fillEl = document.getElementById('progress-fill');
+        var errorEl = document.getElementById('error-msg');
+
+        if (!window.WebGLRenderingContext) {
+            statusEl.innerHTML = '浏览器不支持 WebGL';
+            throw new Error('No WebGL');
+        }
+
+        // =========================================================
+        // 4. 手动加载 framework.js 和 loader.js（绕开自动加载失败）
+        // =========================================================
+        var frameworkLoaded = false;
+        var loaderLoaded = false;
+
+        function checkAndStart() {
+            if (frameworkLoaded && loaderLoaded) {
+                console.log('✅ framework.js 和 loader.js 都已加载');
+                if (typeof unityFramework !== 'undefined') {
+                    console.log('✅ unityFramework 已定义');
+                } else {
+                    console.error('❌ unityFramework 未定义');
+                    statusEl.innerHTML = '❌ unityFramework 未定义';
+                    return;
+                }
+                if (typeof createUnityInstance !== 'undefined') {
+                    console.log('✅ createUnityInstance 已定义，开始加载游戏');
+                    startUnity();
+                } else {
+                    console.error('❌ createUnityInstance 未定义');
+                    statusEl.innerHTML = '❌ createUnityInstance 未定义';
+                }
             }
         }
 
-        // ============================================
-        // 全局修复函数（供Unity C#调用）
-        // ============================================
-        window.FixCanvasSize = function() {
-            resizeCanvas();
-            setTimeout(resizeCanvas, 100);
-            setTimeout(resizeCanvas, 300);
+        // 手动加载 framework.js
+        var frameworkScript = document.createElement('script');
+        frameworkScript.src = buildFiles.frameworkUrl;
+        frameworkScript.onload = function() {
+            console.log('✅ framework.js 加载完成');
+            frameworkLoaded = true;
+            checkAndStart();
         };
+        frameworkScript.onerror = function() {
+            console.error('❌ framework.js 加载失败');
+            statusEl.innerHTML = '❌ framework.js 加载失败';
+        };
+        document.head.appendChild(frameworkScript);
 
-        // ============================================
-        // 监听Canvas变化
-        // ============================================
-        var observer = new MutationObserver(function(mutations) {
-            mutations.forEach(function(mutation) {
-                if (mutation.type === 'attributes' && 
-                    (mutation.attributeName === 'width' || mutation.attributeName === 'height')) {
-                    requestAnimationFrame(resizeCanvas);
+        // 手动加载 loader.js
+        var loaderScript = document.createElement('script');
+        loaderScript.src = buildFiles.loaderUrl;
+        loaderScript.onload = function() {
+            console.log('✅ loader.js 加载完成');
+            loaderLoaded = true;
+            checkAndStart();
+        };
+        loaderScript.onerror = function() {
+            console.error('❌ loader.js 加载失败');
+            statusEl.innerHTML = '❌ loader.js 加载失败';
+        };
+        document.head.appendChild(loaderScript);
+
+        // =========================================================
+        // 5. Unity 启动函数（已移除去 SetFullscreen 的反复调用）
+        // =========================================================
+        function startUnity() {
+            var config = {
+                dataUrl: buildFiles.dataUrl,
+                frameworkUrl: buildFiles.frameworkUrl,
+                codeUrl: buildFiles.wasmUrl,
+                streamingAssetsUrl: 'StreamingAssets',
+                companyName: 'DefaultCompany',
+                productName: 'PacBada',
+                productVersion: '1.0',
+                showBanner: false,
+            };
+
+            function onProgress(progress) {
+                var pct = Math.min(100, Math.round(progress * 100));
+                fillEl.style.width = pct + '%';
+                statusEl.innerHTML = '加载中 ' + pct + '%';
+                if (pct >= 100) {
+                    document.getElementById('loading-area').style.display = 'none';
                 }
-            });
-        });
+            }
 
-        if (unityCanvas) {
-            observer.observe(unityCanvas, { attributes: true });
+            function onSuccess(instance) {
+                document.getElementById('loading-area').style.display = 'none';
+                console.log('🎮 游戏启动成功！');
+
+                // 启动后强制刷新一次，确保初始 Canvas 尺寸正确
+                fitCanvas();
+                window.dispatchEvent(new Event('resize'));
+
+                // 额外延时矫正（部分浏览器需要稍后才能获取正确屏幕尺寸）
+                setTimeout(function() {
+                    fitCanvas();
+                    window.dispatchEvent(new Event('resize'));
+                }, 500);
+            }
+
+            function onError(err) {
+                statusEl.innerHTML = '❌ 加载失败';
+                errorEl.style.display = 'block';
+                errorEl.innerHTML = '错误详情：<br>' + (err.message || err);
+                console.error('Unity 加载错误:', err);
+            }
+
+            // 先矫正一次
+            setTimeout(fitCanvas, 50);
+
+            // 开始加载 Unity
+            createUnityInstance(canvas, config, onProgress)
+                .then(onSuccess)
+                .catch(onError);
         }
 
-        // ============================================
-        // 事件监听
-        // ============================================
-        window.addEventListener('resize', function() {
-            checkOrientation();
-            resizeCanvas();
-        });
-
-        window.addEventListener('orientationchange', function() {
-            setTimeout(function() {
-                checkOrientation();
-                resizeCanvas();
-            }, 300);
-        });
-
-        // 禁止双击缩放
-        document.addEventListener('dblclick', function(e) {
-            e.preventDefault();
-        }, { passive: false });
-
-        // 初始检查
-        checkOrientation();
-
-        // ============================================
-        // Unity加载配置 - 保持默认模板格式
-        // ============================================
-        var container = document.querySelector("#unity-container");
-        var loadingBar = document.querySelector("#unity-loading-bar");
-        var progressBarFull = document.querySelector("#unity-progress-bar-full");
-        var progressText = document.querySelector("#unity-loading-text");
-
-        var buildUrl = "Build";
-        var loaderUrl = buildUrl + "/{{{ LOADER_FILENAME }}}";
-        var config = {
-            dataUrl: buildUrl + "/{{{ DATA_FILENAME }}}",
-            frameworkUrl: buildUrl + "/{{{ FRAMEWORK_FILENAME }}}",
-            codeUrl: buildUrl + "/{{{ CODE_FILENAME }}}",
-            #if MEMORY_FILENAME
-            memoryUrl: buildUrl + "/{{{ MEMORY_FILENAME }}}",
-            #endif
-            #if SYMBOLS_FILENAME
-            symbolsUrl: buildUrl + "/{{{ SYMBOLS_FILENAME }}}",
-            #endif
-            streamingAssetsUrl: "StreamingAssets",
-            companyName: "{{{ COMPANY_NAME }}}",
-            productName: "{{{ PRODUCT_NAME }}}",
-            productVersion: "{{{ PRODUCT_VERSION }}}",
-            matchWebGLToCanvasSize: false,
-            devicePixelRatio: 1
-        };
-
-        // 根据文件名自动判断加载器版本
-        if (/\.loader\.js$/.test(loaderUrl)) {
-            // Unity 2020.1+ 使用新的加载方式
-            var script = document.createElement("script");
-            script.src = loaderUrl;
-            script.onload = function() {
-                createUnityInstance(unityCanvas, config, function(progress) {
-                    var percent = Math.round(progress * 100);
-                    progressBarFull.style.width = percent + '%';
-                    progressText.textContent = 'Loading... ' + percent + '%';
-                }).then(function(instance) {
-                    loadingBar.style.display = 'none';
-                    unityInstance = instance;
-                    // 加载完成后修复Canvas
-                    setTimeout(resizeCanvas, 200);
-                    setTimeout(resizeCanvas, 500);
-                }).catch(function(error) {
-                    console.error('Unity加载失败:', error);
-                    progressText.textContent = '加载失败，请刷新重试';
-                });
-            };
-            document.body.appendChild(script);
-        } else {
-            // Unity 2019及更早版本使用UnityLoader
-            var script = document.createElement("script");
-            script.src = loaderUrl;
-            script.onload = function() {
-                var gameInstance = UnityLoader.instantiate("unity-container", buildUrl + "/{{{ BUILD_FILENAME }}}", {
-                    onProgress: function(gameInstance, progress) {
-                        var percent = Math.round(progress * 100);
-                        progressBarFull.style.width = percent + '%';
-                        progressText.textContent = 'Loading... ' + percent + '%';
-                    },
-                    onComplete: function() {
-                        loadingBar.style.display = 'none';
-                        setTimeout(resizeCanvas, 200);
-                        setTimeout(resizeCanvas, 500);
-                    }
-                });
-            };
-            document.body.appendChild(script);
-        }
+        // 初始矫正
+        setTimeout(fitCanvas, 50);
     </script>
 </body>
 </html>
