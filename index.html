@@ -33,7 +33,7 @@
         #unity-canvas {
             background: #000;
             display: block;
-            /* 尺寸完全由 JS 控制 */
+            /* 尺寸由 JS 完全控制 */
         }
         #loading-area {
             position: fixed;
@@ -59,7 +59,7 @@
             height: 100%;
             background: #00ccff;
             border-radius: 3px;
-            /* 已移除 transition，防止干扰 */
+            /* 不添加 transition，避免时序干扰 */
         }
         #error-msg {
             color: #ff5555;
@@ -68,7 +68,6 @@
             word-break: break-all;
             display: none;
         }
-        /* 横屏提示 */
         #rotate-tip {
             position: fixed;
             top: 0;
@@ -118,7 +117,7 @@
 
     <script>
         // =========================================================
-        // 文件路径配置（请与 Build 文件夹内文件名完全一致）
+        // 文件路径配置
         // =========================================================
         var buildFiles = {
             loaderUrl: "Build/PacbadaWebMobileFinal.loader.js",
@@ -134,8 +133,12 @@
         var dpr = window.devicePixelRatio || 1;
         var unityInstance = null;
 
+        // 标记是否已完成稳定修复
+        var fixTimer = null;
+        var resizeObserver = null;
+
         // =========================================================
-        // Canvas 尺寸同步（CSS 显示尺寸 + 实际渲染像素）
+        // 核心：同时控制 CSS 尺寸与 Canvas 渲染像素尺寸
         // =========================================================
         function fitCanvas() {
             if (!canvas) return;
@@ -157,7 +160,7 @@
             displayW = Math.round(displayW);
             displayH = Math.round(displayH);
 
-            // CSS 显示尺寸（保持宽高比，居中）
+            // CSS 显示尺寸
             canvas.style.width = displayW + 'px';
             canvas.style.height = displayH + 'px';
             canvas.style.position = 'absolute';
@@ -172,31 +175,72 @@
             if (canvas.width !== realW || canvas.height !== realH) {
                 canvas.width = realW;
                 canvas.height = realH;
-                console.log('Canvas 分辨率更新: ' + realW + 'x' + realH);
+                console.log('Canvas 分辨率修正: ' + realW + 'x' + realH);
+                return true;  // 发生过改变
+            }
+            return false;
+        }
+
+        // 将当前 Canvas 尺寸同步给 Unity（如果实例存在）
+        function syncResolution() {
+            if (unityInstance && typeof unityInstance.SetResolution === 'function') {
+                unityInstance.SetResolution(canvas.width, canvas.height);
+                console.log('SetResolution: ' + canvas.width + 'x' + canvas.height);
             }
         }
 
-        // ★ 供 Unity 倒计时结束后调用的全局函数
-        window.refreshGameCanvas = function() {
-            console.log('收到 Unity 刷新请求');
-            dpr = window.devicePixelRatio || 1;   // 更新 dpr（可能变化）
+        // 完整刷新一次（fit + sync）
+        function fullRefresh() {
             fitCanvas();
-            // 强制 Unity 内部渲染分辨率与 Canvas 实际像素一致
-            if (unityInstance && typeof unityInstance.SetResolution === 'function') {
-                unityInstance.SetResolution(canvas.width, canvas.height);
-                console.log('已执行 SetResolution(' + canvas.width + ', ' + canvas.height + ')');
-            } else {
-                window.dispatchEvent(new Event('resize'));
-            }
-        };
+            syncResolution();
+        }
 
-        window.addEventListener('resize', fitCanvas);
+        // =========================================================
+        // 自动修复定时器（游戏启动后循环执行，直到倒计时结束画面正常）
+        // =========================================================
+        function startAutoFix() {
+            if (fixTimer) clearInterval(fixTimer);
+            var count = 0;
+            var maxCount = 20;   // 20 次 * 300ms = 6 秒，足够覆盖倒计时
+            fixTimer = setInterval(function() {
+                fullRefresh();
+                count++;
+                if (count >= maxCount) {
+                    clearInterval(fixTimer);
+                    fixTimer = null;
+                    console.log('自动修复定时器已完成');
+                }
+            }, 300);
+        }
+
+        // =========================================================
+        // 使用 ResizeObserver 实时监控 Canvas 属性变化（Unity 可能内部修改）
+        // =========================================================
+        function startResizeObserver() {
+            if (resizeObserver) resizeObserver.disconnect();
+            if (!canvas) return;
+            resizeObserver = new ResizeObserver(function(entries) {
+                // Canvas 的实际内容尺寸或 CSS 尺寸发生变化时触发
+                var changed = fitCanvas();
+                if (changed) {
+                    syncResolution();
+                }
+            });
+            resizeObserver.observe(canvas);
+        }
+
+        // =========================================================
+        // 监听屏幕旋转、窗口大小变化
+        // =========================================================
+        window.addEventListener('resize', function() {
+            fullRefresh();
+        });
         window.addEventListener('orientationchange', function() {
-            setTimeout(fitCanvas, 600);
+            setTimeout(fullRefresh, 600);  // 等浏览器完成旋转动画
         });
 
         // =========================================================
-        // 加载状态元素
+        // 加载状态
         // =========================================================
         var statusEl = document.getElementById('loading-status');
         var fillEl = document.getElementById('progress-fill');
@@ -208,7 +252,7 @@
         }
 
         // =========================================================
-        // 手动加载 framework.js 与 loader.js（绕开自动加载问题）
+        // 手动加载 framework.js 和 loader.js
         // =========================================================
         var frameworkLoaded = false;
         var loaderLoaded = false;
@@ -265,10 +309,15 @@
                 console.log('🎮 游戏启动成功');
                 unityInstance = instance;
                 dpr = window.devicePixelRatio || 1;
-                fitCanvas();
-                // 启动后立即同步一次渲染分辨率
-                instance.SetResolution(canvas.width, canvas.height);
-                console.log('启动分辨率: ' + canvas.width + 'x' + canvas.height);
+
+                // 启动后立即完整刷新一次
+                fullRefresh();
+
+                // 开启 ResizeObserver 和定时器，双重保险
+                startResizeObserver();
+                startAutoFix();
+
+                // 额外：如果用户旋转屏幕可能触发新的修正，但 resize 已经监听
             }
 
             function onError(err) {
@@ -278,11 +327,13 @@
                 console.error('Unity 加载错误:', err);
             }
 
+            // 先矫正一次
             setTimeout(fitCanvas, 50);
+
             createUnityInstance(canvas, config, onProgress).then(onSuccess).catch(onError);
         }
 
-        // 初始矫正
+        // 页面加载后立即矫正一次
         setTimeout(fitCanvas, 50);
     </script>
 </body>
